@@ -386,6 +386,7 @@ namespace wjfeo_dksruqclsms_spdlatmvpdltm
             {
                 
                 __listener = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
+                __listener.UseOnlyOverlappedIO = true;
                 __listener.Bind(new IPEndPoint(IPAddress.Any, port));
                 __listener.Listen(10);
                     IAsyncResult result = __listener.BeginAccept(new AsyncCallback(__nativeAcceptCallback), __listener);
