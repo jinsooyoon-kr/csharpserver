@@ -1,0 +1,10 @@
+C:\Users\rienna\Desktop\dm_core\core\core\obj\Debug\ResolveAssemblyReference.cache
+C:\Users\rienna\Desktop\dm_core\core\core\obj\Debug\core.pdb
+C:\Users\rienna\Desktop\dm_core\core\core\bin\Debug\core.dll
+C:\Users\rienna\Desktop\dm_core\core\core\bin\Debug\core.pdb
+C:\Users\rienna\Desktop\dm_core\core\core\obj\Debug\core.dll
+D:\decinc\trunk\core\obj\Debug\ResolveAssemblyReference.cache
+D:\decinc\trunk\core\obj\Debug\core.dll
+D:\decinc\trunk\core\obj\Debug\core.pdb
+D:\decinc\trunk\core\bin\Debug\core.dll
+D:\decinc\trunk\core\bin\Debug\core.pdb
