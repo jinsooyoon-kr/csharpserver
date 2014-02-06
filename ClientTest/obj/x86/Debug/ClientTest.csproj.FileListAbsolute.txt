@@ -1,5 +1,0 @@
-D:\decinc\trunk\ClientTest\bin\Debug\ClientTest.exe
-D:\decinc\trunk\ClientTest\bin\Debug\ClientTest.pdb
-D:\decinc\trunk\ClientTest\obj\x86\Debug\ResolveAssemblyReference.cache
-D:\decinc\trunk\ClientTest\obj\x86\Debug\ClientTest.exe
-D:\decinc\trunk\ClientTest\obj\x86\Debug\ClientTest.pdb

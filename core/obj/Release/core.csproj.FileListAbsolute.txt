@@ -1,5 +1,0 @@
-D:\decinc\trunk\core\obj\Release\ResolveAssemblyReference.cache
-D:\decinc\trunk\core\bin\Release\core.dll
-D:\decinc\trunk\core\bin\Release\core.pdb
-D:\decinc\trunk\core\obj\Release\core.dll
-D:\decinc\trunk\core\obj\Release\core.pdb
