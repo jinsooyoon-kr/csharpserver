@@ -10,6 +10,7 @@ using wjfeo_dksruqclsms_spdlatmvpdltm.core;
 using wjfeo_dksruqclsms_spdlatmvpdltm;
 using System.IO;
 using System.Threading;
+using System.Diagnostics;
 namespace ServerTest
 {
     /// <summary>
@@ -41,8 +42,7 @@ namespace ServerTest
                 )).Start();
 
             connector.frm = this;
-            try
-            {
+
                 PacketPolicy policy = new PacketPolicy();
                 customFilter gf = new customFilter(policy);                                
                 AsyncServer server = new AsyncServer(new PacketConv(), 8888, gf);
@@ -94,26 +94,79 @@ namespace ServerTest
 
 
                 server.run();
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show(ex.Message + ex.StackTrace);
 
-            }
+                // continous packet test
+                AsyncServer conServer = new AsyncServer(new conPacketConv(), 8000, gf);
+
+                conServer.addFilter(new Filter(Header => {
+
+                    return true;
+                }
+                , context => {
+                    Debug.WriteLine("CONTINOUS RECV PACKET - " + ((conPacket)context.packet).str);
+                    return true;
+                }
+
+                ));
+
+                conServer.run();
+
         }
     }
+    public class conHeader : Header
+    {
+        public int data;
+    }
+    public class conPacket : Packet
+    {
+        public int data;
+        public String str;
+        conHeader header;
+        public conPacket() { header = new conHeader(); }
+        public Header getHeader() { return header; }
+
+    }
+    public class conPacketConv : PacketConverter
+    {
+        public Packet deserialize(BinaryReader br)
+        {
+            conPacket pack = new conPacket();
+
+            ((conHeader)pack.getHeader()).data = br.ReadInt32();
+            pack.data = br.ReadInt32();
+            pack.str = br.ReadString();
+
+            return pack;
+        }
+        public byte[] serialize(Packet packet)
+        {
+            MemoryStream ms = new MemoryStream();
+
+            BinaryWriter bw = new BinaryWriter(ms);
+            bw.Write(1);
+            bw.Write(1);
+            bw.Write("agsag");
+
+            return ms.GetBuffer();
+        }
+
+    }
+
     public class customFilter : GlobalFilter
     {
         override public long onAccept(AsyncServer.Client Client)
         {
+            long uid = wjfeo_dksruqclsms_spdlatmvpdltm.Utility.UID.uid;
             connector.connection++;
             connector.updateLabel();
-            return wjfeo_dksruqclsms_spdlatmvpdltm.Utility.UID.uid;
+            Debug.WriteLine("OnAccept" + uid);
+            return uid;
             
 
         }
         override public void onClose(long uid)
         {
+            Debug.WriteLine("OnClose" + uid.ToString());
             connector.connection--;
         }
 
@@ -190,4 +243,5 @@ namespace ServerTest
             return ms.GetBuffer();
         }
     }
+    
 }

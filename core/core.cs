@@ -332,7 +332,7 @@ namespace wjfeo_dksruqclsms_spdlatmvpdltm
             }
             private void __nativeAcceptCallback(IAsyncResult r)
             {
-                __listener = r.AsyncState as Socket;
+                __listener = r.AsyncState as Socket;                
                 __temp = __listener.EndAccept(r);
                 Client clnt = new Client(__temp, -1, this.globalhandler);
                 long uid = globalhandler.onAccept(clnt);
