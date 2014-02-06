@@ -12,25 +12,29 @@ namespace ClientTest
     {
         static void Main(string[] args)
         {
-            TcpClient clnt = new TcpClient();
-            clnt.Connect("127.0.0.1", 8000);
-            String data = DateTime.Now.ToString();
+            int cnt = 0;
+            while (true)
+            {
 
-            MemoryStream ms = new MemoryStream();
-            BinaryWriter bw = new BinaryWriter(ms);
-            bw.Write(1);
-            bw.Write(2);
-            bw.Write(data);
-            clnt.Client.Send(ms.GetBuffer());
-            clnt.Client.Send(ms.GetBuffer());
-            clnt.Client.Send(ms.GetBuffer());
+                new Thread(new ThreadStart(delegate
+                {
 
-            Thread.Sleep(1000);
 
-            clnt.Client.Send(ms.GetBuffer());
-            clnt.Client.Send(ms.GetBuffer());
-            clnt.Client.Send(ms.GetBuffer());
+                    TcpClient clnt = new TcpClient();
+                    clnt.Connect("127.0.0.1", 8000);
+                    String data = DateTime.Now.ToString();
 
+                    MemoryStream ms = new MemoryStream();
+                    BinaryWriter bw = new BinaryWriter(ms);
+                    bw.Write(1);
+                    bw.Write(2);
+                    bw.Write(data);
+                    clnt.Client.Send(ms.GetBuffer());
+
+                })).Start();
+                Console.WriteLine(cnt++);
+                Thread.Sleep(10);
+            }
         }
     }
 }

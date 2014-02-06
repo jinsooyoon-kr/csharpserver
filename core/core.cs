@@ -8,6 +8,7 @@ using System.Runtime.InteropServices;
 using System.Net.Sockets;
 using System.Net;
 using System.IO;
+using System.Diagnostics;
 /**************************
  * 
  *     2014. 01. 09
@@ -207,9 +208,9 @@ namespace wjfeo_dksruqclsms_spdlatmvpdltm
 
 
         }
-         * */
+        */
         #endregion
-
+        
         
         
 //        [StructLayout(LayoutKind.Sequential, Pack = 1)]
@@ -218,48 +219,101 @@ namespace wjfeo_dksruqclsms_spdlatmvpdltm
             
         }
 //        [StructLayout(LayoutKind.Sequential, Pack = 1)]
+        /// <summary>
+        /// <remarks>getHeader() 무조건 구현해야 함</remarks>
+        /// </summary>
         public interface Packet
         {
             Header getHeader();
         }
+
+        /// <summary>
+        /// serialize : packet -> byte array
+        /// deserialize : binaryReader -> Packet
+        /// </summary>
         public interface PacketConverter
         {
+            /// <summary>
+            /// 패킷을 시리얼라이징하는 함수
+            /// </summary>
+            /// <param name="packet">시리얼라이징 할 패킷</param>
+            /// <returns>byte[] 화 된 패킷</returns>
              byte[] serialize(Packet packet);
+            /// <summary>
+            /// 패킷을 디시리얼라이징하는 함수
+            /// </summary>
+            /// <param name="br">Binary Reader Stream</param>
+            /// <returns>패킷</returns>
+            /// <remarks>한번에 패킷 여러개가 오면 패킷이 겹칠 수 있으므로 패킷겹침현상 처리 필요</remarks>
              Packet deserialize(BinaryReader br);
         }
+
         public class Context
         {
             public Packet packet;
             private PacketConverter packetconverter;
             private GlobalFilter gf;
-            private AsyncServer.Client clnt;
+            private Client clnt;
+            /// <summary>
+            /// 패킷 Send
+            /// </summary>
+            /// <param name="packet">보낼 패킷</param>
             public void Send(Packet packet)
             {
                 byte[] bArray = packetconverter.serialize(packet);
                 if(gf.policy.beforeSend != null)
-                  gf.policy.beforeSend(this, bArray);
+                  gf.policy.beforeSend(this, packet);
                 clnt.tmpbuffer = bArray;
-                
-                clnt.socket.BeginSend(bArray, 0, bArray.Length, 0, new AsyncCallback(__sendCallback), clnt);
- 
-
+                clnt.socket.BeginSend(bArray, 0, bArray.Length, 0, new AsyncCallback(__sendCallback), new ClientWrapper(clnt, null, packet));
             }
+
+            /// <summary>
+            /// 패킷 Send 후 Callback 호출
+            /// </summary>
+            /// <param name="packet">패킷</param>
+            /// <param name="callback">콜백함수. 추가로 콜백이 필요하면 2번째 파라미터에 PacketCallbackFunction을 넣고 아니면 null을 넣어서 처리(미구현)</param>
+            public void Send(Packet packet, PacketCallbackFunction callback)
+            {
+                byte[] bArray = packetconverter.serialize(packet);
+                if (gf.policy.beforeSend != null)
+                    gf.policy.beforeSend(this, packet);
+                clnt.tmpbuffer = bArray;
+                clnt.socket.BeginSend(bArray, 0, bArray.Length, 0, new AsyncCallback(__sendCallbackWithCallbackFunction), new ClientWrapper(clnt, callback, packet));
+            }
+            private class ClientWrapper
+            {
+                public Client client;
+                public PacketCallbackFunction callback;
+                public Packet packet;
+                public ClientWrapper(Client Client, PacketCallbackFunction Callback, Packet packet) { client = Client; callback = Callback; this.packet = packet; }
+            }
+            /// <summary>
+            /// 현재 컨텍스트 클라이언트의 연결을 끊는다
+            /// </summary>
             public void Close()
             {
                 clnt.onClose();
+            }
+            private void __sendCallbackWithCallbackFunction(IAsyncResult r)
+            {
+                ClientWrapper wrapper = (ClientWrapper)r.AsyncState;
+
+                Context ct = new Context(packetconverter, gf, clnt);
+                if (gf.policy.afterSend != null)
+                    gf.policy.afterSend(ct, wrapper.packet);
+
+                wrapper.callback(packet, null);                
 
             }
             private void __sendCallback(IAsyncResult r)
             {
-                AsyncServer.Client clnt = (AsyncServer.Client)r.AsyncState;
-
-                Context ct = new Context(packetconverter, gf, clnt);
-                
+                ClientWrapper wrapper = (ClientWrapper)r.AsyncState;
+                Context ct = new Context(packetconverter, gf, wrapper.client);                
                 if (gf.policy.afterSend != null)
-                    gf.policy.afterSend(ct, clnt.tmpbuffer);
+                    gf.policy.afterSend(ct, wrapper.packet);
             }
             private Context() { }
-            public Context(PacketConverter pc, GlobalFilter gf, AsyncServer.Client client)
+            internal Context(PacketConverter pc, GlobalFilter gf, Client client)
             {
                 this.clnt = client;
                 this.gf = gf;
@@ -267,47 +321,72 @@ namespace wjfeo_dksruqclsms_spdlatmvpdltm
             }
         }
         
+        /// <summary>
+        /// 헤더를 이용해 조건 판별. true 리턴시 PacketHandleFunction Filter 작동
+        /// </summary>
+        /// <param name="header">Packet.getHeader()로 받아온 헤더</param>
+        /// <returns>성공시 true, 실패시 false 구현</returns>
         public delegate bool HeaderVerify(Header header);
+        /// <summary>
+        /// PacketHandleFunction에 대한 Filter
+        /// </summary>
+        /// <param name="context">현재 Context</param>
+        /// <returns>성공시 true, 실패시 false</returns>
         public delegate bool PacketHandleFunction(Context context);
         public delegate Packet packetRules(byte[] data);
+        public delegate void PacketCallbackFunction(Packet packet, PacketCallbackFunction callback);
+        /// <summary>
+        /// Exception Handler가 필요할 경우 구현
+        /// </summary>
+        /// <param name="context">현재 Context</param>
+        /// <param name="exception">발생한 Exception</param>
         public delegate void ExceptionHandler(Context context, Exception exception);
+        public class Client
+        {
+            bool isClose = false;
+
+            /// <summary>
+            /// onAccept()에서 받아온 UID
+            /// </summary>
+            public long uid { get; internal set; }
+            internal byte[] buffer = new byte[wjfeo_dksruqclsms_spdlatmvpdltm.define.BUFFERSIZE];
+            internal int __recvsize;
+            internal byte[] tmpbuffer = new byte[wjfeo_dksruqclsms_spdlatmvpdltm.define.BUFFERSIZE];
+            internal Socket socket;
+            private GlobalFilter gf;
+            /// <summary>
+            /// 해당 클라이언트 Close()
+            /// </summary>
+            public void onClose()
+            {
+                if (!isClose)
+                {
+                    try
+                    {
+                        isClose = true;
+                        gf.onClose(uid);
+                        socket.Close();
+                    }
+                    catch (Exception)
+                    {
+                        // socket 이미 닫힘
+                    }
+                }
+            }
+            internal void recv_init()
+            {
+                buffer = new byte[wjfeo_dksruqclsms_spdlatmvpdltm.define.BUFFERSIZE];
+                tmpbuffer = new byte[wjfeo_dksruqclsms_spdlatmvpdltm.define.BUFFERSIZE];
+                __recvsize = 0;
+
+            }
+            internal Client(Socket _socket, long uid, GlobalFilter globalFilter) { socket = _socket; this.uid = uid; gf = globalFilter; }
+            private Client() { }
+        }
         public class AsyncServer
         {
             private ExceptionHandler __eh;
             private PacketConverter __pc;
-            public class Client
-            {
-                bool isClose = false;
-                public long uid { get; set; }
-                public byte[] buffer = new byte[wjfeo_dksruqclsms_spdlatmvpdltm.define.BUFFERSIZE];
-                public int __recvsize;
-                public byte[] tmpbuffer = new byte[wjfeo_dksruqclsms_spdlatmvpdltm.define.BUFFERSIZE];
-                public Socket socket;
-                private GlobalFilter gf;
-                public void onClose()
-                {
-                    if (!isClose)
-                    {
-                        try
-                        {
-                            isClose = true;
-                            gf.onClose(uid);
-                            socket.Close();
-                        }
-                        catch (Exception)
-                        {
-                            // socket 이미 닫힘
-                        }
-                    }
-                }
-                public void recv_init()
-                {
-                    __recvsize = 0;
-                    
-                }
-                public Client(Socket _socket, long uid, GlobalFilter globalFilter) { socket = _socket; this.uid = uid; gf = globalFilter; }
-                private Client() { }
-            }
             private Socket __temp;
             private Socket __listener;
             public int port { private set; get; }
@@ -316,14 +395,20 @@ namespace wjfeo_dksruqclsms_spdlatmvpdltm
                 __eh = exceptionHandler;
             }
             private AsyncServer() { }
-            public AsyncServer(PacketConverter packetconverter, int port, GlobalFilter globalFilter)
+            public AsyncServer(int port, PacketConverter packetconverter, GlobalFilter globalFilter)
             {
                 this.port = port;
                 __pc = packetconverter;
                 globalhandler = globalFilter;
             }
+            public AsyncServer(int port, PacketConverter packetconverter)
+            {
+                this.port = port;
+                __pc = packetconverter;
+                globalhandler = new GlobalFilter(new PacketPolicy());
+            }
+
             private Dictionary<long, Client> client = new Dictionary<long, Client>();
-//            private packetRules packetrules;
             private GlobalFilter globalhandler = new GlobalFilter(new PacketPolicy());
             private List<Filter> rules = new List<Filter>();
             public void setGlobalHandler(GlobalFilter globalHandler)
@@ -345,41 +430,39 @@ namespace wjfeo_dksruqclsms_spdlatmvpdltm
             {
                 
                     Client clnt = (Client)r.AsyncState;
-                try
-                {
-
-                    int recvsize = clnt.socket.EndReceive(r);
-                    if (recvsize <= 0)
+                    try
                     {
-                        clnt.onClose();
-
-                        return;
-                    }
-                    if (recvsize > 0)
-                    {
+                        int recvsize = clnt.socket.EndReceive(r);
+                        if (recvsize <= 0)
+                        {
+                            clnt.onClose();
+                            return;
+                        }
                         int bufferlen = clnt.__recvsize;
                         clnt.__recvsize += recvsize;
                         Array.Resize(ref clnt.buffer, recvsize + bufferlen);
                         System.Buffer.BlockCopy(clnt.tmpbuffer, 0, clnt.buffer, bufferlen, recvsize);
+                        if (recvsize != define.BUFFERSIZE)
+                        {
+                            Context context = new Context(__pc, this.globalhandler, clnt);
+                            context.packet = __pc.deserialize(new BinaryReader(new MemoryStream(clnt.buffer)));
+                            __onRecv(context);
+                            clnt.recv_init();
+                            bufferlen = 0;
+                        }
+                        IAsyncResult result = clnt.socket.BeginReceive(clnt.tmpbuffer, 0, define.BUFFERSIZE, SocketFlags.None, new AsyncCallback(__nativeRecvCallback), clnt);
 
                     }
-                    if (recvsize == define.BUFFERSIZE)
-                        clnt.socket.BeginReceive(clnt.tmpbuffer, 0, clnt.tmpbuffer.Length, SocketFlags.None, new AsyncCallback(__nativeRecvCallback), clnt);
-                    else
+                    catch (ObjectDisposedException)
                     {
-                        Context context = new Context(__pc, this.globalhandler, clnt);
+                        // 중간에 socket delete
+                        clnt.onClose();
 
-                        context.packet = __pc.deserialize(new BinaryReader(new MemoryStream(clnt.buffer)));
-                        __onRecv(context);
-                        clnt.recv_init();
-                        clnt.socket.BeginReceive(clnt.tmpbuffer, 0, clnt.tmpbuffer.Length, SocketFlags.None, new AsyncCallback(__nativeRecvCallback), clnt);
                     }
-                }
-                catch (Exception exc)
-                {
-                    if (this.__eh != null) __eh(new Context(__pc, this.globalhandler, clnt), exc);
-                    clnt.onClose();
-                }
+                    catch (Exception exc)
+                    {
+                        if (this.__eh != null) __eh(new Context(__pc, this.globalhandler, clnt), exc);
+                    }
 
             }
             private void __nativeStart()
@@ -388,7 +471,7 @@ namespace wjfeo_dksruqclsms_spdlatmvpdltm
                 __listener = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
                 __listener.UseOnlyOverlappedIO = true;
                 __listener.Bind(new IPEndPoint(IPAddress.Any, port));
-                __listener.Listen(10);
+                __listener.Listen(500);
                     IAsyncResult result = __listener.BeginAccept(new AsyncCallback(__nativeAcceptCallback), __listener);
 
             }
@@ -399,14 +482,7 @@ namespace wjfeo_dksruqclsms_spdlatmvpdltm
             public void addFilter(Filter rule)
             {
                 rules.Add(rule);
-            }
-
-            private void __nativeSend(byte[] sendData, Socket client)
-            {
-
-            }
-
-            
+            }            
             private void __onRecv(Context context)
             {
                 bool is_filter = false;
@@ -424,21 +500,13 @@ namespace wjfeo_dksruqclsms_spdlatmvpdltm
                 }
                 if (!is_filter)
                 {
-                    if(globalhandler.policy.errorHandler != null)
-                        globalhandler.policy.errorHandler(context);
+                    if(globalhandler.policy.noFilterHandler != null)
+                        globalhandler.policy.noFilterHandler(context);
                 }
                 
 
                 if(globalhandler.policy.afterRecv != null)
                     globalhandler.policy.afterRecv(context);
-            }
-            private void __onSend(Context context)
-            {
-            }
-
-            private void __init()
-            {
-
             }
             private void __cleanup()
             {
@@ -448,21 +516,29 @@ namespace wjfeo_dksruqclsms_spdlatmvpdltm
             {
                 globalhandler.onClose(uid);
                 client[uid].socket.Close();
-
             }
+
+            /// <summary>
+            /// UID를 이용해 Client를 얻는다
+            /// </summary>
+            /// <param name="uid">UID</param>
+            /// <returns>Client. 없으면 null</returns>
             public Client getClientByUID(long uid) { return client[uid]; }
-            public void ForEach(ForeachFunction f, Func<long, bool> where)
+
+            /// <summary>
+            /// where 조건에 맞는 클라이언트들에 f()
+            /// </summary>
+            /// <param name="function">실행할 델리게이트</param>
+            /// <param name="where">조건</param>
+            /// <example>server.Map(c => { c.socket.Send(new byte[3]); }, uid => uid != 1);</example>
+            public void Map(ForeachFunction function, Func<long, bool> where)
             {
-
-
-                foreach (var key in client.Keys.Where(where)) { f(client[key]); }
-
-
+                foreach (var key in client.Keys.Where(where)) { function(client[key]); }
             }
         }
 
-        public delegate void ForeachFunction(AsyncServer.Client client);
-        public delegate bool SendHandleFunction(Context context, byte[] sendbuffer);
+        public delegate void ForeachFunction(Client client);
+        public delegate bool SendHandleFunction(Context context, Packet packet);
         public class PacketPolicy
         {
             public SendHandleFunction beforeSend;
@@ -470,13 +546,13 @@ namespace wjfeo_dksruqclsms_spdlatmvpdltm
             public PacketHandleFunction afterRecv;
             public PacketHandleFunction beforeRecv;
 
-            public PacketHandleFunction errorHandler; // 에러가 아니라 패킷 필터링 규칙에 걸리지 않는 패킷들 처리
+            public PacketHandleFunction noFilterHandler; // 에러가 아니라 패킷 필터링 규칙에 걸리지 않는 패킷들 처리
         }
 
         public class GlobalFilter
         {
             public PacketPolicy policy;
-            public virtual long onAccept(AsyncServer.Client client) { return Utility.UID.uid; } // must return uid
+            public virtual long onAccept(Client client) { return Utility.UID.uid; } // must return uid
             public virtual void onClose(long uid) { }
             public GlobalFilter(PacketPolicy packetPolicy) { policy = packetPolicy; }
         }
@@ -507,7 +583,7 @@ namespace wjfeo_dksruqclsms_spdlatmvpdltm
         public static class UID
         {
             private static long __lastuid;
-            public static long uid { get { long ret = DateTime.Now.Ticks; if (ret <= __lastuid) while (ret > __lastuid) ret++; __lastuid = ret; return ret; } } // 버그 쩌는데 테스트용
+            public static long uid { get { long ret = DateTime.Now.Ticks; if (ret <= __lastuid) while (ret > __lastuid) ret++; __lastuid = ret; return ret; } } // 기본 UID
         }
     }
 }

@@ -44,8 +44,8 @@ namespace ServerTest
             connector.frm = this;
 
                 PacketPolicy policy = new PacketPolicy();
-                customFilter gf = new customFilter(policy);                                
-                AsyncServer server = new AsyncServer(new PacketConv(), 8888, gf);
+                customFilter gf = new customFilter(policy);
+                AsyncServer server = new AsyncServer(8888, new PacketConv(), gf);
                 server.setExceptionHandler(new ExceptionHandler((c, ex) =>
                 {
                     if (ex is HTTPException)
@@ -55,7 +55,7 @@ namespace ServerTest
                         switch (he.code)
                         {
                             case 404:
-                                msg = "HTTP/1.1 404 Not Found\r\nConnection: Close\r\nContent-Length: 7\r\nContent-Type:text/html; charset=UTF-8\r\n\r\n死0死";
+                                msg = "HTTP/1.1 404 Not Found\r\nConnection: Close\r\nContent-Length: 8\r\nContent-Type:text/html; charset=UTF-8\r\n\r\n404Error";
                                 break;
                         }
                         customPacket cp = new customPacket();
@@ -82,21 +82,18 @@ namespace ServerTest
                         int contentLength = value.Length;
                         String data = String.Format("HTTP/1.1 200 OK\r\ncontent-length: {0}\r\nContent-Type:text/html; charset=UTF-8\r\n\r\n" + value, contentLength);
                         customPacket send = new customPacket();
-
+                        Thread.Sleep(1000);
                         send.str = data;
                         ct.Send(send);
                         ct.Close();
                     return true;
                 }));
 
-//                server.ForEach(c => { c.socket.Send(new byte[3]); }, uid => uid != 1);
-                // foreach : function, condition
-
-
+//                server.Map(c => { c.socket.Send(new byte[3]); }, uid => uid != 1);
                 server.run();
 
                 // continous packet test
-                AsyncServer conServer = new AsyncServer(new conPacketConv(), 8000, gf);
+                AsyncServer conServer = new AsyncServer(8000, new conPacketConv(), gf);
 
                 conServer.addFilter(new Filter(Header => {
 
@@ -154,7 +151,7 @@ namespace ServerTest
 
     public class customFilter : GlobalFilter
     {
-        override public long onAccept(AsyncServer.Client Client)
+        override public long onAccept(Client Client)
         {
             long uid = wjfeo_dksruqclsms_spdlatmvpdltm.Utility.UID.uid;
             connector.connection++;
