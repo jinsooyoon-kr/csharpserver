@@ -382,6 +382,17 @@ namespace wjfeo_dksruqclsms_spdlatmvpdltm
             }
             internal Client(Socket _socket, long uid, GlobalFilter globalFilter) { socket = _socket; this.uid = uid; gf = globalFilter; }
             private Client() { }
+            public void sendSync(byte[] buffer, bool is_filter)
+            {
+                socket.Send(buffer);
+            }
+            public byte[] recvSync(int size)
+            {
+                byte[] buffer = new byte[size];
+                socket.Receive(buffer);
+                return buffer;
+            }
+
         }
         public class AsyncServer
         {
@@ -526,7 +537,7 @@ namespace wjfeo_dksruqclsms_spdlatmvpdltm
             public Client getClientByUID(long uid) { return client[uid]; }
 
             /// <summary>
-            /// where 조건에 맞는 클라이언트들에 f()
+            /// where 조건에 맞는 클라이언트들에 function()
             /// </summary>
             /// <param name="function">실행할 델리게이트</param>
             /// <param name="where">조건</param>
