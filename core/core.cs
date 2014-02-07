@@ -379,7 +379,7 @@ namespace wjfeo_dksruqclsms_spdlatmvpdltm
             }
             internal Client(Socket _socket, long uid, GlobalFilter globalFilter) { socket = _socket; this.uid = uid; gf = globalFilter; }
             private Client() { }
-
+            public Dictionary<String, Object> Locals = new Dictionary<string, object>();
             public void setNoDelay(bool isNoDelay)
             {                
                 socket.NoDelay = isNoDelay;
@@ -398,6 +398,7 @@ namespace wjfeo_dksruqclsms_spdlatmvpdltm
         }
         public class AsyncServer
         {
+            public Dictionary<String, Object> Globals = new Dictionary<string, object>();
             private ExceptionHandler __eh;
             private PacketConverter __pc;
             private Socket __temp;
