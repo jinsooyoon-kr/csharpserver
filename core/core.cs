@@ -297,11 +297,9 @@ namespace wjfeo_dksruqclsms_spdlatmvpdltm
             private void __sendCallbackWithCallbackFunction(IAsyncResult r)
             {
                 ClientWrapper wrapper = (ClientWrapper)r.AsyncState;
-
                 Context ct = new Context(packetconverter, gf, clnt);
                 if (gf.policy.afterSend != null)
                     gf.policy.afterSend(ct, wrapper.packet);
-
                 wrapper.callback(packet, null);                
 
             }
@@ -344,7 +342,6 @@ namespace wjfeo_dksruqclsms_spdlatmvpdltm
         public class Client
         {
             bool isClose = false;
-
             /// <summary>
             /// onAccept()에서 받아온 UID
             /// </summary>
@@ -382,8 +379,13 @@ namespace wjfeo_dksruqclsms_spdlatmvpdltm
             }
             internal Client(Socket _socket, long uid, GlobalFilter globalFilter) { socket = _socket; this.uid = uid; gf = globalFilter; }
             private Client() { }
-            public void sendSync(byte[] buffer, bool is_filter)
-            {
+
+            public void setNoDelay(bool isNoDelay)
+            {                
+                socket.NoDelay = isNoDelay;
+            }
+            public void sendSync(byte[] buffer)
+            {                
                 socket.Send(buffer);
             }
             public byte[] recvSync(int size)
@@ -514,8 +516,6 @@ namespace wjfeo_dksruqclsms_spdlatmvpdltm
                     if(globalhandler.policy.noFilterHandler != null)
                         globalhandler.policy.noFilterHandler(context);
                 }
-                
-
                 if(globalhandler.policy.afterRecv != null)
                     globalhandler.policy.afterRecv(context);
             }
@@ -535,7 +535,7 @@ namespace wjfeo_dksruqclsms_spdlatmvpdltm
             /// <param name="uid">UID</param>
             /// <returns>Client. 없으면 null</returns>
             public Client getClientByUID(long uid) { return client[uid]; }
-
+            
             /// <summary>
             /// where 조건에 맞는 클라이언트들에 function()
             /// </summary>
